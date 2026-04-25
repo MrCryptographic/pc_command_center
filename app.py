@@ -127,6 +127,6 @@ def get_stats():
 if __name__ == '__main__':
     print("--- PC Command Center v2.0 ---")
     print("Access this dashboard from another device on the same network using:")
-    print("http://YOUR_PC_IP_ADDRESS:5000")
+    print("http://YOUR_PC_IP_ADDRESS:5001")
     print("------------------------------")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5001, debug=False)
