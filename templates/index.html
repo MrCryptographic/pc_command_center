@@ -1,0 +1,104 @@
+<!-- FILE: templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Command Center</title>
+    <style>
+        :root {
+            --bg-color: #121212; --card-color: #1e1e1e; --text-color: #e0e0e0;
+            --primary-color: #0d6efd; --accent-color: #333; --danger-color: #dc3545;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 15px; }
+        h1, h2 { color: var(--primary-color); border-bottom: 2px solid var(--accent-color); padding-bottom: 10px; margin-top: 0; }
+        .container { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .card { background-color: var(--card-color); border-radius: 8px; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        .button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; }
+        button { padding: 12px; font-size: 16px; border: none; border-radius: 5px; background-color: var(--primary-color); color: white; cursor: pointer; transition: background-color 0.2s; text-align: center; }
+        button:hover { filter: brightness(1.2); }
+        button.danger { background-color: var(--danger-color); }
+        input, textarea { flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid var(--accent-color); background-color: #2a2a2a; color: var(--text-color); font-size: 16px; }
+        textarea { resize: vertical; min-height: 80px; }
+        .flex-group { display: flex; gap: 10px; margin-bottom: 10px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+        .stat-item { background-color: var(--accent-color); padding: 15px; border-radius: 5px; }
+        .stat-value { font-size: 2em; font-weight: bold; }
+        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #333; color: white; padding: 15px; border-radius: 5px; opacity: 0; transition: opacity 0.5s; z-index: 1000; pointer-events: none; }
+        #toast.show { opacity: 1; }
+        #screenshot-modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.8); }
+        #screenshot-modal img { width: 95%; max-width: 1200px; margin: 2.5% auto; display: block; }
+        .close-modal { position: absolute; top: 15px; right: 35px; color: #f1f1f1; font-size: 40px; font-weight: bold; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--accent-color); }
+    </style>
+</head>
+<body>
+    <h1>PC Command Center</h1>
+    <div class="container">
+        <div class="card">
+            <h2>Live System Stats</h2>
+            <div class="stats-grid">
+                <div class="stat-item">CPU<br><span id="cpu-usage" class="stat-value">--%</span></div>
+                <div class="stat-item">RAM<br><span id="ram-usage" class="stat-value">--%</span></div>
+                <div class="stat-item">Disk<br><span id="disk-usage" class="stat-value">--%</span></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Top Processes</h2>
+            <table><thead><tr><th>Name</th><th>CPU %</th></tr></thead><tbody id="process-list"><tr><td colspan="2">Loading...</td></tr></tbody></table>
+        </div>
+        <div class="card">
+            <h2>Utilities</h2>
+            <div class="button-grid"><button id="screenshot-btn">View Screenshot</button></div><hr style="border-color: var(--accent-color); margin: 20px 0;">
+            <h4>Universal Clipboard</h4><textarea id="clipboard-text" placeholder="Clipboard content..."></textarea>
+            <div class="button-grid"><button id="pc-to-phone-btn">PC → Phone</button><button id="phone-to-pc-btn">Phone → PC</button></div>
+            <h4 style="margin-top: 20px;">Type Text on PC</h4>
+            <div class="flex-group"><input type="text" id="text-to-type" placeholder="Enter text..."><button id="type-text-btn">Type</button></div>
+            <h4 style="margin-top: 20px;">Send Notification to PC</h4>
+            <div class="flex-group"><input type="text" id="notification-text" placeholder="Notification message..."><button id="send-notification-btn">Send</button></div>
+        </div>
+        <div class="card">
+            <h2>Advanced Controls</h2><h4>Run Custom Command</h4>
+            <div class="flex-group"><input type="text" id="custom-command" placeholder="e.g., 'taskkill /f /im chrome.exe'"><button id="run-command-btn">Run</button></div>
+            <small>Warning: Executes any command on your PC. Use with caution.</small>
+        </div>
+        <div class="card">
+            <h2>PC & Media Controls</h2>
+            <div class="button-grid">
+                <button class="danger" data-command="shutdown">Shutdown</button><button class="danger" data-command="restart">Restart</button>
+                <button data-command="sleep">Sleep</button><button data-command="prevtrack">⏮️</button>
+                <button data-command="playpause">⏯️</button><button data-command="nexttrack">⏭️</button>
+            </div>
+        </div>
+    </div>
+    <div id="screenshot-modal"><span class="close-modal">&times;</span><img id="screenshot-image" src="" alt="PC Screenshot"></div>
+    <div id="toast"></div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_BASE_URL = `http://${window.location.hostname}:5000`;
+            const toast = document.getElementById('toast');
+            function showToast(message) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => { toast.classList.remove('show'); }, 3000); }
+            async function sendCommand(command) { try { const response = await fetch(`${API_BASE_URL}/api/control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'command', command: command }) }); if (!response.ok) throw new Error('Network response not ok'); const data = await response.json(); showToast(`Command '${data.command}' sent!`); } catch (error) { showToast('Failed to send command.'); } }
+            const fetchStats = async () => { try { const response = await fetch(`${API_BASE_URL}/api/stats`); const data = await response.json(); document.getElementById('cpu-usage').textContent = `${data.cpu.toFixed(1)}%`; document.getElementById('ram-usage').textContent = `${data.ram.toFixed(1)}%`; document.getElementById('disk-usage').textContent = `${data.disk.toFixed(1)}%`; } catch (error) { console.error('Error fetching stats:', error); } };
+            const fetchProcesses = async () => { try { const response = await fetch(`${API_BASE_URL}/api/processes`); const processes = await response.json(); const list = document.getElementById('process-list'); list.innerHTML = ''; processes.forEach(p => { const row = list.insertRow(); row.insertCell(0).textContent = p.name; row.insertCell(1).textContent = p.cpu_percent.toFixed(1); }); } catch (error) { console.error('Error fetching processes:', error); } };
+            const getPcClipboard = async () => { const response = await fetch(`${API_BASE_URL}/api/clipboard`); const data = await response.json(); document.getElementById('clipboard-text').value = data.clipboard_content; showToast('PC clipboard copied.'); };
+            const setPcClipboard = async () => { const content = document.getElementById('clipboard-text').value; await fetch(`${API_BASE_URL}/api/clipboard`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }); showToast('Sent to PC clipboard.'); };
+            const typeTextOnPc = async () => { const text = document.getElementById('text-to-type').value; if (!text) return; await fetch(`${API_BASE_URL}/api/type_string`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) }); showToast('Text sent.'); document.getElementById('text-to-type').value = ''; };
+            const sendNotificationToPc = async () => { const message = document.getElementById('notification-text').value; if (!message) return; await fetch(`${API_BASE_URL}/api/notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: "Message from Phone", message }) }); showToast('Notification sent.'); document.getElementById('notification-text').value = ''; };
+            const runCustomCommand = async () => { const command = document.getElementById('custom-command').value; if (!command) return; if (!confirm(`Run this command?\n\n${command}`)) return; await fetch(`${API_BASE_URL}/api/control`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'custom', command }) }); showToast('Custom command sent.'); };
+            const modal = document.getElementById('screenshot-modal'), screenshotImg = document.getElementById('screenshot-image');
+            document.getElementById('screenshot-btn').addEventListener('click', () => { screenshotImg.src = `${API_BASE_URL}/api/screenshot?t=${new Date().getTime()}`; modal.style.display = 'block'; });
+            document.querySelector('.close-modal').addEventListener('click', () => { modal.style.display = 'none'; screenshotImg.src = ''; });
+            document.querySelectorAll('button[data-command]').forEach(b => b.addEventListener('click', () => sendCommand(b.dataset.command)));
+            document.getElementById('pc-to-phone-btn').addEventListener('click', getPcClipboard);
+            document.getElementById('phone-to-pc-btn').addEventListener('click', setPcClipboard);
+            document.getElementById('type-text-btn').addEventListener('click', typeTextOnPc);
+            document.getElementById('send-notification-btn').addEventListener('click', sendNotificationToPc);
+            document.getElementById('run-command-btn').addEventListener('click', runCustomCommand);
+            fetchStats(); fetchProcesses();
+            setInterval(fetchStats, 3000); setInterval(fetchProcesses, 5000);
+        });
+    </script>
+</body>
+</html>
